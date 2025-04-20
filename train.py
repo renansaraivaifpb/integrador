@@ -22,7 +22,7 @@ elif 'fcn_8' in model_name:
     model = fcn_8(pretrained=False, base=4)
 
 tg = DataGenerator(image_paths=image_paths, annot_paths=annot_paths,
-                   batch_size=5, augment=True)
+                   batch_size=1, augment=True)
 
 checkpoint = ModelCheckpoint(os.path.join('models', model_name+'.model'), monitor='dice', verbose=1, mode='max',
                              save_best_only=True, save_weights_only=False, period=10)
