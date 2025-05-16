@@ -99,7 +99,7 @@ def unet(pretrained=False, base=4):
     model.compile(optimizer=Adam(1e-4),
                   loss=loss,
                   metrics=[dice])
-    model.summary()
+    # model.summary()
 
     return model
 
@@ -175,6 +175,6 @@ def fcn_8(pretrained=False, base=4):
     model.compile(optimizer=Adam(1e-4),
                   loss=loss,
                   metrics=[dice])
-    model.summary()
+    # model.summary()
 
     return model
