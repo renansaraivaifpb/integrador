@@ -2,7 +2,7 @@
 
 # imshape should have 3 channels for rgb input images
 # (height, width)
-imshape = (1600, 1344, 3)
+imshape = (576, 640, 3)
 # set your classification mode (binary or multi)
 mode = 'multi'
 # model_name (unet or fcn_8)
@@ -12,7 +12,13 @@ logbase = 'logs'
 
 # classes are defined in hues
 # background should be left out
-hues = {'pista': 30}
+hues = {'pista': 30,
+        'carro': 60,
+        'gramado': 90,
+        'lama': 120,
+        'pessoa': 150,
+        'cone': 180,
+        'obstaculo': 230}
 
 labels = sorted(hues.keys())
 
