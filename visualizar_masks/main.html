@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Navigation Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 flex items-center justify-center min-h-screen">
+    <div class="flex flex-col items-center space-y-4">
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+            <img id="displayImage" src="output_images/0.png" alt="Image" class="max-w-full h-auto max-h-[70vh]">
+        </div>
+        <div class="flex space-x-4">
+            <button id="prevButton" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-600">Previous</button>
+            <span id="imageCounter" class="text-white text-lg">1 / 71</span>
+            <button id="nextButton" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-600">Next</button>
+        </div>
+    </div>
+
+    <script>
+        const imageDir = '../output_images/';
+        const totalImages = 71; // Based on your code stopping at i == 70
+        let currentIndex = 0;
+
+        const displayImage = document.getElementById('displayImage');
+        const prevButton = document.getElementById('prevButton');
+        const nextButton = document.getElementById('nextButton');
+        const imageCounter = document.getElementById('imageCounter');
+
+        function updateImage() {
+            displayImage.src = `${imageDir}${currentIndex}.png`;
+            imageCounter.textContent = `${currentIndex + 1} / ${totalImages}`;
+            prevButton.disabled = currentIndex === 0;
+            nextButton.disabled = currentIndex === totalImages - 1;
+        }
+
+        prevButton.addEventListener('click', () => {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateImage();
+            }
+        });
+
+        nextButton.addEventListener('click', () => {
+            if (currentIndex < totalImages - 1) {
+                currentIndex++;
+                updateImage();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'ArrowLeft' && currentIndex > 0) {
+                currentIndex--;
+                updateImage();
+            } else if (event.key === 'ArrowRight' && currentIndex < totalImages - 1) {
+                currentIndex++;
+                updateImage();
+            }
+        });
+
+        // Initialize the interface
+        updateImage();
+    </script>
+</body>
+</html>
