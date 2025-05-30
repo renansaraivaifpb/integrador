@@ -114,7 +114,7 @@ def main():
     model.fit(
         tg,
         steps_per_epoch=len(tg),
-        epochs=140,
+        epochs=300,
         verbose=1,
         callbacks=callbacks
     )
