@@ -51,7 +51,7 @@ conda install -c conda-forge pydensecrf
 ```
 
 2-6-20
-Shapely should now install with 1.7 in python 3.6 on pip.
+Shapely should now install with 1.7 in python 3.6.13 on pip.
 
 `pip install -r windows_requirements.txt`
 
