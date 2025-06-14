@@ -7,6 +7,7 @@ from config import model_name, n_classes
 from models import unet, fcn_8
 from colorama import Fore, Style, init
 from tensorflow.keras.utils import plot_model
+os.environ["PATH"] += os.pathsep + 'C:/Users/arqis/Documents/renan/Graphviz-12.2.1-win64/bin'
 
 
 # Inicializa colorama para colorir os textos no terminal, com reset automático após cada print
@@ -94,10 +95,6 @@ def main():
 
     # Mostra o resumo do modelo de forma estilizada no terminal
     styled_model_summary(model)
-
-    # Gera e salva uma imagem da arquitetura do modelo para visualização
-    plot_model(model, to_file='model_diagram.png', show_shapes=True, show_layer_names=True, dpi=120)
-    print(Fore.GREEN + "Arquitetura do modelo salva como: model_diagram.png")
 
     # Instancia o gerador de dados customizado para alimentar o modelo durante o treino
     tg = DataGenerator(
