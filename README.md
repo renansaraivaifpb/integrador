@@ -1,6 +1,4 @@
-# Semantic Shapes: Custom Semantic Segmentation Tutorial/ Pipeline
-
-![demo](docs/images/demo.gif)
+#  Semantic Segmentation Pipeline
 
 This repository provides a pipeline to develop different semantic segmentation models.
 
@@ -12,7 +10,7 @@ Make sure you have a working versions of CUDA, cudnn, and nvidia drivers.
 
 I currently use cuda 10.0 with nvidia-driver-418
 
-### Ubuntu 18.04
+### Ubuntu 24
 
 You can see your nvidia driver using `nvidia-smi`
 
@@ -99,23 +97,3 @@ Once the model is training, view tensorboard using:
 
 `tensorboard --logdir=logs`
 
-![scalars_tab](docs/images/scalars.png)
-![image_tab](docs/images/multi_semantic.png)
-
-## Stream
-
-Stream will use whatever model_name is set in config.py
-
-`python stream.py`
-
-B - Toggle Background
-
-C - Toggle CRF
-
-M - Softmax vs Argmax Mode
-
-## Conditional Random Fields
-
-Conditional random fields may produce an improved mask.
-
-![crf](docs/images/crf.png)
