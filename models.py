@@ -15,51 +15,12 @@ def preprocess_input(x):
     x *= 2.
     return x
 
-# Certifique-se de que este decorador está presente
-@tf.autograph.experimental.do_not_convert
+
 def dice(y_true, y_pred, smooth=1.):
     y_true_f = K.flatten(y_true)
     y_pred_f = K.flatten(y_pred)
     intersection = K.sum(y_true_f * y_pred_f)
     return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
-
-# --- NOVA MÉTRICA: Intersection over Union (IoU) ---
-@tf.autograph.experimental.do_not_convert
-def iou(y_true, y_pred, smooth=1.):
-    y_true_f = K.flatten(y_true)
-    y_pred_f = K.flatten(y_pred)
-    intersection = K.sum(y_true_f * y_pred_f)
-    # IoU = interseção / (soma_dos_elementos_true + soma_dos_elementos_pred - interseção)
-    union = K.sum(y_true_f) + K.sum(y_pred_f) - intersection
-    return (intersection + smooth) / (union + smooth)
-
-# --- NOVA MÉTRICA: Pixel Accuracy (Acurácia de Pixel) ---
-# O Keras já tem uma métrica de acurácia que funciona para isso,
-# mas podemos definir uma explicitamente para controle total ou para referência.
-# Para multi-classe (softmax), Keras 'accuracy' já faz isso.
-# Para binário (sigmoid), Keras 'binary_accuracy' faz isso.
-# No entanto, se quisermos uma função explícita:
-@tf.autograph.experimental.do_not_convert
-def pixel_accuracy(y_true, y_pred):
-    # Para multi-classe (softmax), y_pred precisa ser convertido para labels
-    # K.cast converte booleanos (True/False) em float (1.0/0.0)
-    # y_true_labels = K.argmax(y_true, axis=-1)
-    # y_pred_labels = K.argmax(y_pred, axis=-1)
-    # correct_pixels = K.cast(K.equal(y_true_labels, y_pred_labels), K.floatx())
-    # return K.mean(correct_pixels)
-
-    # Para ambos os casos (binário/multi-classe) e para Keras 2.x/TF 2.x
-    # tf.keras.metrics.Accuracy lida bem com isso.
-    # No entanto, se você quiser uma função K.backend, o Keras já tem `categorical_accuracy` ou `binary_accuracy`.
-    # Vou usar o Keras 'accuracy' padrão na compilação, pois ele se adapta ao n_classes.
-    # Apenas como exemplo de como se poderia fazer:
-    # return K.mean(K.equal(K.round(y_true), K.round(y_pred))) # Mais para binário
-
-    # A maneira mais direta de usar a acurácia de pixel para segmentação é usar a métrica 'accuracy' do Keras
-    # na compilação do modelo, que já lida com as particularidades de n_classes.
-    # Por isso, não é necessário criar uma função customizada 'pixel_accuracy' aqui,
-    # basta adicionar 'accuracy' na lista de métricas.
-    pass # Este placeholder indica que não estamos criando uma função customizada 'pixel_accuracy' aqui.
 
 
 def unet(pretrained=False, base=4):
@@ -67,8 +28,7 @@ def unet(pretrained=False, base=4):
     if pretrained:
         path = os.path.join('models', model_name+'.model')
         if os.path.exists(path):
-            # Adicione 'iou' aos custom_objects se você a salvou com o modelo
-            model = load_model(path, custom_objects={'dice': dice, 'iou': iou})
+            model = load_model(path, custom_objects={'dice': dice})
             model.summary()
             return model
         else:
@@ -77,17 +37,13 @@ def unet(pretrained=False, base=4):
     if n_classes == 1:
         loss = 'binary_crossentropy'
         final_act = 'sigmoid'
-        # Para n_classes == 1, a métrica de acurácia de pixel é 'binary_accuracy'
-        metrics_list = [dice, iou, 'binary_accuracy']
     elif n_classes > 1:
         loss = 'categorical_crossentropy'
         final_act = 'softmax'
-        # Para n_classes > 1, a métrica de acurácia de pixel é 'categorical_accuracy'
-        metrics_list = [dice, iou, 'categorical_accuracy']
 
     b = base
     i = Input((imshape[0], imshape[1], imshape[2]))
-    s = Lambda(lambda x: preprocess_input(x)) (i)
+    s = Lambda(preprocess_input)(i)
 
     c1 = Conv2D(2**b, (3, 3), activation='elu', kernel_initializer='he_normal', padding='same') (s)
     c1 = Dropout(0.1) (c1)
@@ -142,8 +98,8 @@ def unet(pretrained=False, base=4):
     model = Model(inputs=i, outputs=o, name=model_name)
     model.compile(optimizer=Adam(1e-4),
                   loss=loss,
-                  metrics=metrics_list) # Usando a lista de métricas
-    #model.summary()
+                  metrics=[dice])
+    model.summary()
 
     return model
 
@@ -153,8 +109,7 @@ def fcn_8(pretrained=False, base=4):
     if pretrained:
         path = os.path.join('models', model_name+'.model')
         if os.path.exists(path):
-            # Adicione 'iou' aos custom_objects se você a salvou com o modelo
-            model = load_model(path, custom_objects={'dice': dice, 'iou': iou})
+            model = load_model(path, custom_objects={'dice': dice})
             return model
         else:
             print('Failed to load existing model at: {}'.format(path))
@@ -162,11 +117,9 @@ def fcn_8(pretrained=False, base=4):
     if n_classes == 1:
         loss = 'binary_crossentropy'
         final_act = 'sigmoid'
-        metrics_list = [dice, iou, 'binary_accuracy']
     elif n_classes > 1:
         loss = 'categorical_crossentropy'
         final_act = 'softmax'
-        metrics_list = [dice, iou, 'categorical_accuracy']
 
     b = base
     i = Input(shape=imshape)
@@ -221,7 +174,7 @@ def fcn_8(pretrained=False, base=4):
     model = Model(inputs=i, outputs=o, name=model_name)
     model.compile(optimizer=Adam(1e-4),
                   loss=loss,
-                  metrics=metrics_list) # Usando a lista de métricas
-    #model.summary()
+                  metrics=[dice])
+    model.summary()
 
     return model
