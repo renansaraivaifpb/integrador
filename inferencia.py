@@ -2,88 +2,103 @@ import os
 import cv2
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import to_categorical
 from utils import add_masks, crf
-from models import dice
-from config import imshape, model_name, n_classes
+from config import imshape, n_classes
 
 # === CONFIGURAÇÕES ===
 MODE = 'softmax'          # ou 'argmax'
 CALC_CRF = False          # Ativar CRF?
 BACKGROUND = True         # Fundir máscara com imagem original?
-INPUT_FOLDER = 'C:/Users/arqis/Documents/renan/integrador-main/logs/images_to_predict'
+INPUT_FOLDER = 'logs/images_to_predict'
 OUTPUT_FOLDER = 'outputs_inferencias'
+NUM_IMAGES = 60            # Quantidade de imagens para inferência
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# Carrega o modelo
-model = load_model('models/unetmulti', custom_objects={'dice': dice}, compile=False)
+# --- CARREGA O MODELO TFLITE ---
+tflite_model_path = 'models/unet_multi.tflite'
+interpreter = tf.lite.Interpreter(model_path=tflite_model_path)
+interpreter.allocate_tensors()
 
-# Encontra a primeira imagem válida na pasta
-image_path = None
-for filename in os.listdir(INPUT_FOLDER):
-    if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-        image_path = os.path.join(INPUT_FOLDER, filename)
-        break
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+input_index = input_details[0]['index']
+input_shape = input_details[0]['shape']
 
-if image_path is None:
-    print("Nenhuma imagem encontrada na pasta.")
+# Filtra imagens válidas
+valid_images = [f for f in os.listdir(INPUT_FOLDER) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+if not valid_images:
+    print("Nenhuma imagem válida encontrada.")
     exit()
 
-# Carrega e prepara a imagem
-image = cv2.imread(image_path)
-image_resized = cv2.resize(image, (imshape[1], imshape[0]))
-image_rgb = cv2.cvtColor(image_resized, cv2.COLOR_BGR2RGB)
-input_tensor = np.expand_dims(image_rgb, axis=0)
+# Limita à quantidade desejada
+valid_images = valid_images[:NUM_IMAGES]
 
-# Predição
-pred = model.predict(input_tensor)
+# Loop de inferência
+for i, filename in enumerate(valid_images, 1):
+    image_path = os.path.join(INPUT_FOLDER, filename)
 
-# Diagnóstico
-print("Shape da predição:", pred.shape)
-print("Valor mínimo:", np.min(pred))
-print("Valor máximo:", np.max(pred))
+    # Carrega e prepara a imagem
+    image = cv2.imread(image_path)
+    image_resized = cv2.resize(image, (imshape[1], imshape[0]))
+    image_rgb = cv2.cvtColor(image_resized, cv2.COLOR_BGR2RGB)
 
-# Pós-processamento
-if MODE == 'argmax':
-    if n_classes == 1:
-        pred = pred.squeeze()
-        softmax = np.stack([1 - pred, pred], axis=2)
-        pred = to_categorical(np.argmax(softmax, axis=2))
+    # Pré-processamento (ajuste conforme necessário)
+    input_tensor = np.expand_dims(image_rgb.astype(np.float32), axis=0)
+    # Exemplo de normalização (descomente se necessário)
+    # input_tensor = input_tensor / 255.0
+
+    if input_tensor.shape != tuple(input_shape):
+        input_tensor = np.resize(input_tensor, input_shape).astype(input_details[0]['dtype'])
     else:
-        pred = np.argmax(pred.squeeze(), axis=2)
-        pred = to_categorical(pred, num_classes=n_classes)
+        input_tensor = input_tensor.astype(input_details[0]['dtype'])
 
-if CALC_CRF:
-    if n_classes == 1:
-        softmax = np.stack([1 - pred.squeeze(), pred.squeeze()], axis=2)
-        mask = crf(softmax, image_rgb)
-        mask = cv2.cvtColor(np.array(mask, dtype=np.float32), cv2.COLOR_GRAY2RGB)
+    interpreter.set_tensor(input_index, input_tensor)
+    interpreter.invoke()
+
+    output_index = output_details[0]['index']
+    pred = interpreter.get_tensor(output_index)
+
+    print(f"[{i}/{NUM_IMAGES}] Shape da predição:", pred.shape)
+
+    # Pós-processamento
+    if MODE == 'argmax':
+        if n_classes == 1:
+            pred = pred.squeeze()
+            softmax = np.stack([1 - pred, pred], axis=2)
+            pred = to_categorical(np.argmax(softmax, axis=2))
+        else:
+            pred = np.argmax(pred.squeeze(), axis=2)
+            pred = to_categorical(pred, num_classes=n_classes)
+
+    if CALC_CRF:
+        if n_classes == 1:
+            softmax = np.stack([1 - pred.squeeze(), pred.squeeze()], axis=2)
+            mask = crf(softmax, image_rgb)
+            mask = cv2.cvtColor(np.array(mask, dtype=np.float32), cv2.COLOR_GRAY2RGB)
+        else:
+            mask = crf(pred.squeeze(), image_rgb)
     else:
-        mask = crf(pred.squeeze(), image_rgb)
-else:
-    if n_classes == 1:
-        mask = pred.squeeze() * 255.0
-        mask = cv2.cvtColor(mask.astype(np.uint8), cv2.COLOR_GRAY2RGB)
+        if n_classes == 1:
+            mask = pred.squeeze() * 255.0
+            mask = cv2.cvtColor(mask.astype(np.uint8), cv2.COLOR_GRAY2RGB)
+        else:
+            mask = add_masks(pred.squeeze() * 255.0)
+
+    # Salva a máscara separadamente
+    mask_resized = cv2.resize(mask.astype(np.uint8), (image_resized.shape[1], image_resized.shape[0]))
+    mask_save_path = os.path.join(OUTPUT_FOLDER, f'mask_{filename}')
+    cv2.imwrite(mask_save_path, cv2.cvtColor(mask_resized, cv2.COLOR_RGB2BGR))
+    print(f"   Máscara salva em: {mask_save_path}")
+
+    # Combina imagem + máscara (se ativado)
+    if BACKGROUND:
+        blended = cv2.addWeighted(image_rgb, 1.0, mask_resized, 1.0, 0)
+        result = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
     else:
-        mask = add_masks(pred.squeeze() * 255.0)
+        result = cv2.cvtColor(mask_resized, cv2.COLOR_RGB2BGR)
 
-# Salva a máscara separadamente
-mask_resized = cv2.resize(mask.astype(np.uint8), (image_resized.shape[1], image_resized.shape[0]))
-mask_save_path = os.path.join(OUTPUT_FOLDER, 'mask_' + os.path.basename(image_path))
-cv2.imwrite(mask_save_path, cv2.cvtColor(mask_resized, cv2.COLOR_RGB2BGR))
-print(f"Máscara salva separadamente em: {mask_save_path}")
-
-# Combina imagem + máscara (se ativado)
-if BACKGROUND:
-    blended = cv2.addWeighted(image_rgb, 1.0, mask_resized, 1.0, 0)
-    result = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
-else:
-    result = cv2.cvtColor(mask_resized, cv2.COLOR_RGB2BGR)
-
-# Salva imagem final
-save_path = os.path.join(OUTPUT_FOLDER, 'result_' + os.path.basename(image_path))
-cv2.imwrite(save_path, result)
-print(f"Inferência feita em: {image_path}")
-print(f"Resultado salvo em: {save_path}")
+    result_path = os.path.join(OUTPUT_FOLDER, f'result_{filename}')
+    cv2.imwrite(result_path, result)
+    print(f"   Resultado salvo em: {result_path}")
