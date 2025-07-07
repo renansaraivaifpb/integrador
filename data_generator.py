@@ -135,7 +135,7 @@ class DataGenerator(tf.keras.utils.Sequence):
 
             i += len(shape['points'])
 
-        keypoints = ia.KeypointsOnImage(points, shape=(1600,1344,3))
+        keypoints = ia.KeypointsOnImage(points, shape=(256,256,3))
 
         seq_det = seq.to_deterministic()
         image_aug = seq_det.augment_images([im])[0]
