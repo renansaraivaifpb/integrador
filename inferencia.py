@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 import tensorflow as tf
+import time
 from tensorflow.keras.utils import to_categorical
 from utils import add_masks, crf
 from config import imshape, n_classes
@@ -12,12 +13,13 @@ CALC_CRF = False          # Ativar CRF?
 BACKGROUND = True         # Fundir máscara com imagem original?
 INPUT_FOLDER = 'logs/images_to_predict'
 OUTPUT_FOLDER = 'outputs_inferencias'
-NUM_IMAGES = 60            # Quantidade de imagens para inferência
+NUM_IMAGES = 50            # Quantidade de imagens para inferência
 
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
 # --- CARREGA O MODELO TFLITE ---
-tflite_model_path = 'models/unet_multi.tflite'
+tflite_model_path = 'models/modelo_otimizado.tflite'  # Altere aqui para comparar outros modelos
+print(f"Carregando modelo: {tflite_model_path}")
 interpreter = tf.lite.Interpreter(model_path=tflite_model_path)
 interpreter.allocate_tensors()
 
@@ -35,6 +37,10 @@ if not valid_images:
 # Limita à quantidade desejada
 valid_images = valid_images[:NUM_IMAGES]
 
+print(f"Iniciando inferência em {len(valid_images)} imagens...\n")
+start_total = time.time()
+inference_times = []
+
 # Loop de inferência
 for i, filename in enumerate(valid_images, 1):
     image_path = os.path.join(INPUT_FOLDER, filename)
@@ -44,23 +50,22 @@ for i, filename in enumerate(valid_images, 1):
     image_resized = cv2.resize(image, (imshape[1], imshape[0]))
     image_rgb = cv2.cvtColor(image_resized, cv2.COLOR_BGR2RGB)
 
-    # Pré-processamento (ajuste conforme necessário)
     input_tensor = np.expand_dims(image_rgb.astype(np.float32), axis=0)
-    # Exemplo de normalização (descomente se necessário)
-    # input_tensor = input_tensor / 255.0
-
     if input_tensor.shape != tuple(input_shape):
         input_tensor = np.resize(input_tensor, input_shape).astype(input_details[0]['dtype'])
     else:
         input_tensor = input_tensor.astype(input_details[0]['dtype'])
 
+    # --- Tempo de inferência ---
+    start = time.time()
     interpreter.set_tensor(input_index, input_tensor)
     interpreter.invoke()
+    pred = interpreter.get_tensor(output_details[0]['index'])
+    end = time.time()
+    inference_time = end - start
+    inference_times.append(inference_time)
 
-    output_index = output_details[0]['index']
-    pred = interpreter.get_tensor(output_index)
-
-    print(f"[{i}/{NUM_IMAGES}] Shape da predição:", pred.shape)
+    print(f"[{i}/{NUM_IMAGES}] Tempo de inferência: {inference_time:.4f} s - Shape da predição: {pred.shape}")
 
     # Pós-processamento
     if MODE == 'argmax':
@@ -86,13 +91,10 @@ for i, filename in enumerate(valid_images, 1):
         else:
             mask = add_masks(pred.squeeze() * 255.0)
 
-    # Salva a máscara separadamente
     mask_resized = cv2.resize(mask.astype(np.uint8), (image_resized.shape[1], image_resized.shape[0]))
     mask_save_path = os.path.join(OUTPUT_FOLDER, f'mask_{filename}')
     cv2.imwrite(mask_save_path, cv2.cvtColor(mask_resized, cv2.COLOR_RGB2BGR))
-    print(f"   Máscara salva em: {mask_save_path}")
 
-    # Combina imagem + máscara (se ativado)
     if BACKGROUND:
         blended = cv2.addWeighted(image_rgb, 1.0, mask_resized, 1.0, 0)
         result = cv2.cvtColor(blended, cv2.COLOR_RGB2BGR)
@@ -101,4 +103,9 @@ for i, filename in enumerate(valid_images, 1):
 
     result_path = os.path.join(OUTPUT_FOLDER, f'result_{filename}')
     cv2.imwrite(result_path, result)
-    print(f"   Resultado salvo em: {result_path}")
+
+# --- Tempo total ---
+total_time = time.time() - start_total
+avg_time = np.mean(inference_times)
+print(f"\nTempo total para {NUM_IMAGES} imagens: {total_time:.2f} segundos")
+print(f"Tempo médio por imagem: {avg_time:.4f} segundos")
